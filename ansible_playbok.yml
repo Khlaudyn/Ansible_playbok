@@ -1,0 +1,179 @@
+---
+- name: Set Up
+  hosts: all
+  become: true
+  become_user: root
+  vars_files:
+    - /home/vagrant/var/main.yml
+  #vars_files:
+  #  - /home/vagrant/variables/mysql.yml
+  roles:
+    - role: geerlingguy.mysql
+
+  tasks:
+    - name: Update
+      apt: force_apt_get=yes
+
+    - name: Install Packages
+      command: "apt install -y git curl unzip wget "
+
+    - name: Install python
+      command: "apt install -y python3-pip"
+
+    - name: Install pexpect
+      command: "pip3 install pyexpect"
+
+    - name: Install Apache2
+      apt:
+        name: apache2
+        state: latest
+        force_apt_get: yes
+    - name: Restart Apache
+      systemd:
+        name: apache2
+        state: restarted
+
+    - name: Add SURY PPA for PHP
+      command: "apt -y install lsb-release apt-transport-https ca-certificates"
+
+    - name: Add the Wget
+      command: "wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg"
+
+    - name: Echo the file
+      shell: echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/php.list
+
+    - name: Apt Update
+      apt: update_cache=yes
+
+    - name: Install PHP
+      command: "apt install php libapache2-mod-php php8.1-mysql php8.1-common php8.1-mysql php8.1-xml php8.1-xmlrpc php8.1-curl php8.1-gd php8.1-imagick php8.1-cli php8.1-dev php8.1-imap php8.1-mbstring php8.1-opcache php8.1-soap php8.1-zip php8.1-intl -y"
+
+    - name: Update Apt
+      apt: update_cache=yes force_apt_get=yes
+
+
+    - name: Enter the /var/www/
+      command: mkdir laravel
+      register: file_exists
+      ignore_errors: yes
+      args:
+        chdir: /var/www/
+
+    - name: Git clone
+      ansible.builtin.git:
+        repo: "https://github.com/f1amy/laravel-realworld-example-app.git"        
+        dest: /var/www/laravel
+        clone: yes
+        update: no
+
+    - name: Copy the web.pho file
+      ansible.builtin.copy:
+        src: /home/vagrant/ansible/web.php
+        dest: /var/www/laravel/routes/web.php
+
+    - name: copy .env file
+      ansible.builtin.copy:
+        src: /home/vagrant/.env
+        dest: /var/www/laravel/.env
+
+
+    - name: Change the project directory and install Composer
+      ansible.builtin.shell: curl -sS https://getcomposer.org/installer | php
+      args:
+        chdir: /var/www/laravel
+
+    - name: Move the downloaded php to the system path
+      ansible.builtin.command: mv composer.phar /usr/local/bin/composer   
+      args:
+        chdir: /var/www/laravel
+
+    - name: Make composer executable
+      ansible.builtin.file:
+        path: /usr/local/bin/composer
+        mode: '775'
+
+    - name: Install Composer
+      ansible.builtin.command: composer install -n
+      args:
+        chdir: /var/www/laravel
+
+    - name: Set up Artisan
+      ansible.builtin.shell: php artisan key:generate
+      args:
+        chdir: /var/www/laravel
+
+    - name: Run php artisan config cache
+      ansible.builtin.shell: php artisan config:cache
+      args:
+        chdir: /var/www/laravel
+
+    - name: Set up Artisan
+      ansible.builtin.shell: php artisan key:generate
+      args:
+        chdir: /var/www/laravel
+
+    - name: Run php artisan config cache
+      ansible.builtin.shell: php artisan config:cache
+      args:
+        chdir: /var/www/laravel
+
+    - name: Run the php artisan migrate fresh
+      become_user: root
+      ansible.builtin.shell: php artisan migrate:fresh
+      args:
+        chdir: /var/www/laravel
+
+    - name: Run the php artisan migrate seed
+      ansible.builtin.shell: php artisan migrate --seed
+      args:
+        chdir: /var/www/laravel
+
+    - name: Create an apache virtual host configuration file
+      ansible.builtin.copy:
+        dest: /etc/apache2/sites-available/laravel.conf
+        content: |
+          <VirtualHost *:80>
+              ServerAdmin web@localhost
+              ServerName claudineogu.me
+              ServerAlias www.cladineogu.me
+              DocumentRoot /var/www/laravel/public
+
+              <Directory /var/www/laravel/public>
+                  AllowOverride All
+              </Directory>
+              ErrorLog ${APACHE_LOG_DIR}/error.log
+              CustomLog ${APACHE_LOG_DIR}/access.log combined
+          </VirtualHost>
+    - name: Enable a2enmod rewrite
+      ansible.builtin.command: a2enmod rewrite
+
+    - name: Disable default apache page and enable laravel page
+      ansible.builtin.command: a2dissite 000-default.conf
+
+    - name: Enable laravel page
+      ansible.builtin.command: a2ensite laravel.conf
+
+    - name: Change file ownership, group and permissions
+      ansible.builtin.file:
+        path: /var/www/laravel
+        state: directory
+        recurse: yes
+        owner: www-data
+        group: www-data
+        mode: '775'
+
+    - name: Set Certbot
+      ansible.builtin.script: /home/vagrant/certbot.sh
+
+    - name: Restart apache web server
+      ansible.builtin.command: systemctl restart apache2
+
+      
+
+
+
+    
+    
+
+  
+
