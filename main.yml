@@ -1,0 +1,15 @@
+---
+
+mysql_root_password: "1234"
+mysql_root_user: "root"
+http_port: "80"
+https_port: "443"
+ssh_port: "22"
+mysql_port: "3306"
+mysql_databases:
+  - name: mydb
+mysql_users:
+  - name: ify
+    host: "%"
+    password: 1234
+    priv: "mydb.*:ALL"
